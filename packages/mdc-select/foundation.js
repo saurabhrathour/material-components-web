@@ -59,7 +59,7 @@ class MDCSelectFoundation extends MDCFoundation {
       hasClass: (/* className: string */) => false,
       activateBottomLine: () => {},
       deactivateBottomLine: () => {},
-      getValue: () => {},
+      setValue: () => {},
       isRtl: () => false,
       hasLabel: () => false,
       floatLabel: (/* value: boolean */) => {},
@@ -67,6 +67,10 @@ class MDCSelectFoundation extends MDCFoundation {
       hasOutline: () => false,
       notchOutline: (/* labelWidth: number, isRtl: boolean */) => {},
       closeOutline: () => {},
+      openMenu: () => {},
+      closeMenu: () => {},
+      setSelectedIndex: () => {},
+      setDisabled: () => {},
     });
   }
 
@@ -76,6 +80,31 @@ class MDCSelectFoundation extends MDCFoundation {
   constructor(adapter) {
     super(Object.assign(MDCSelectFoundation.defaultAdapter, adapter));
   }
+
+  setSelectedIndex(index) {
+    this.adapter_.setSelectedIndex(index);
+    this.handleChange();
+  }
+
+  setValue(value) {
+    this.adapter_.setValue(value);
+    this.handleChange();
+  }
+
+  getValue() {
+    this.adapter_.getValue();
+  }
+
+  setDisabled(isDisabled) {
+    this.adapter_.setDisabled(isDisabled);
+    this.updateDisabledStyle(isDisabled);
+  }
+
+  layout() {
+    const openNotch = this.adapter_.getValue().length > 0;
+    this.notchOutline(openNotch);
+  }
+
 
   /**
    * Updates the styles of the select to show the disasbled state.
@@ -95,27 +124,56 @@ class MDCSelectFoundation extends MDCFoundation {
    */
   handleChange() {
     const optionHasValue = this.adapter_.getValue().length > 0;
-    this.adapter_.floatLabel(optionHasValue);
-    this.notchOutline(optionHasValue);
+    const isFocused = this.adapter_.hasClass(cssClasses.FOCUSED);
+    if (!isFocused) {
+      this.adapter_.floatLabel(optionHasValue);
+      this.notchOutline(optionHasValue);
+    }
   }
 
   /**
-   * Handles focus events from root element.
+   * Handles focus events from select element.
    */
   handleFocus() {
+    if (this.adapter_.isMenuOpened()) return;
+    this.adapter_.addClass(cssClasses.FOCUSED);
     this.adapter_.floatLabel(true);
     this.notchOutline(true);
-    this.adapter_.addClass('mdc-select--focused');
+    this.adapter_.addClass(cssClasses.FOCUSED);
     this.adapter_.activateBottomLine();
+    this.adapter_.openMenu();
   }
 
   /**
-   * Handles blur events from root element.
+   * Handles blur events from select element.
    */
   handleBlur() {
+    if (this.adapter_.isMenuOpened()) return;
+    this.adapter_.removeClass(cssClasses.FOCUSED);
     this.handleChange();
-    this.adapter_.removeClass('mdc-select--focused');
+    this.adapter_.removeClass(cssClasses.FOCUSED);
     this.adapter_.deactivateBottomLine();
+  }
+
+  handleClick(normalizedX) {
+    if (this.adapter_.isMenuOpened()) return;
+    this.adapter_.setRippleCenter(normalizedX);
+
+    if (this.adapter_.hasClass(cssClasses.FOCUSED)) {
+      this.adapter_.openMenu();
+    }
+  }
+
+  handleKeydown(event) {
+    if (this.adapter_.isMenuOpened()) return;
+
+    const isEnter = event.key === 'Enter' || event.keyCode === 13;
+    const isSpace = event.key === 'Space' || event.keyCode === 32;
+
+    if (this.adapter_.hasClass(cssClasses.FOCUSED) && (isEnter || isSpace)) {
+      this.adapter_.openMenu();
+      event.preventDefault();
+    }
   }
 
   /**
@@ -126,13 +184,14 @@ class MDCSelectFoundation extends MDCFoundation {
     if (!this.adapter_.hasOutline()) {
       return;
     }
+    const isFocused = this.adapter_.hasClass(cssClasses.FOCUSED);
 
     if (openNotch) {
       const labelScale = numbers.LABEL_SCALE;
       const labelWidth = this.adapter_.getLabelWidth() * labelScale;
       const isRtl = this.adapter_.isRtl();
       this.adapter_.notchOutline(labelWidth, isRtl);
-    } else {
+    } else if (!isFocused) {
       this.adapter_.closeOutline();
     }
   }
